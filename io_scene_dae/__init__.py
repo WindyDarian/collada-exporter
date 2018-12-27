@@ -22,8 +22,7 @@ from bpy_extras.io_utils import ExportHelper
 bl_info = {
     "name": "Better Collada Exporter",
     "author": "Juan Linietsky",
-    "blender": (2, 5, 8),
-    "api": 38691,
+    "blender": (2, 80, 0),
     "location": "File > Import-Export",
     "description": ("Export DAE Scenes. This plugin actually works better! "
                     "Otherwise contact the Godot Engine community."),
@@ -136,7 +135,7 @@ class ExportDAE(bpy.types.Operator, ExportHelper):
         description="Export shape keys for selected objects.",
         default=False,
         )
-		
+
     anim_optimize_precision = FloatProperty(
         name="Precision",
         description=("Tolerence for comparing double keyframes "
@@ -177,15 +176,20 @@ def menu_func(self, context):
 
 
 def register():
-    bpy.utils.register_module(__name__)
+    bpy.utils.register_class(ExportDAE)
 
-    bpy.types.INFO_MT_file_export.append(menu_func)
-
+    if bpy.app.version < (2, 80, 0):
+        bpy.types.INFO_MT_file_export.append(menu_func)
+    else:
+        bpy.types.TOPBAR_MT_file_export.append(menu_func)
 
 def unregister():
-    bpy.utils.unregister_module(__name__)
+    bpy.utils.unregister_class(ExportDAE)
 
-    bpy.types.INFO_MT_file_export.remove(menu_func)
+    if bpy.app.version < (2, 80, 0):
+        bpy.types.INFO_MT_file_export.remove(menu_func)
+    else:
+        bpy.types.TOPBAR_MT_file_export.remove(menu_func)
 
 if __name__ == "__main__":
     register()

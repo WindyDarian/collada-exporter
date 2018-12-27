@@ -238,49 +238,51 @@ class DaeExporter:
         specular_tex = None
         emission_tex = None
         normal_tex = None
-        for i in range(len(material.texture_slots)):
-            ts = material.texture_slots[i]
-            if not ts:
-                continue
-            if not ts.use:
-                continue
-            if not ts.texture:
-                continue
-            if ts.texture.type != "IMAGE":
-                continue
 
-            if ts.texture.image is None:
-                continue
+        if bpy.app.version < (2, 80, 0): # TODO: try to find texture with nodes
+            for i in range(len(material.texture_slots)):
+                ts = material.texture_slots[i]
+                if not ts:
+                    continue
+                if not ts.use:
+                    continue
+                if not ts.texture:
+                    continue
+                if ts.texture.type != "IMAGE":
+                    continue
 
-            # Image
-            imgid = self.export_image(ts.texture.image)
+                if ts.texture.image is None:
+                    continue
 
-            # Surface
-            surface_sid = self.new_id("fx_surf")
-            self.writel(S_FX, 3, "<newparam sid=\"{}\">".format(surface_sid))
-            self.writel(S_FX, 4, "<surface type=\"2D\">")
-            self.writel(S_FX, 5, "<init_from>{}</init_from>".format(imgid))
-            self.writel(S_FX, 5, "<format>A8R8G8B8</format>")
-            self.writel(S_FX, 4, "</surface>")
-            self.writel(S_FX, 3, "</newparam>")
+                # Image
+                imgid = self.export_image(ts.texture.image)
 
-            # Sampler
-            sampler_sid = self.new_id("fx_sampler")
-            self.writel(S_FX, 3, "<newparam sid=\"{}\">".format(sampler_sid))
-            self.writel(S_FX, 4, "<sampler2D>")
-            self.writel(S_FX, 5, "<source>{}</source>".format(surface_sid))
-            self.writel(S_FX, 4, "</sampler2D>")
-            self.writel(S_FX, 3, "</newparam>")
-            sampler_table[i] = sampler_sid
+                # Surface
+                surface_sid = self.new_id("fx_surf")
+                self.writel(S_FX, 3, "<newparam sid=\"{}\">".format(surface_sid))
+                self.writel(S_FX, 4, "<surface type=\"2D\">")
+                self.writel(S_FX, 5, "<init_from>{}</init_from>".format(imgid))
+                self.writel(S_FX, 5, "<format>A8R8G8B8</format>")
+                self.writel(S_FX, 4, "</surface>")
+                self.writel(S_FX, 3, "</newparam>")
 
-            if ts.use_map_color_diffuse and diffuse_tex is None:
-                diffuse_tex = sampler_sid
-            if ts.use_map_color_spec and specular_tex is None:
-                specular_tex = sampler_sid
-            if ts.use_map_emit and emission_tex is None:
-                emission_tex = sampler_sid
-            if ts.use_map_normal and normal_tex is None:
-                normal_tex = sampler_sid
+                # Sampler
+                sampler_sid = self.new_id("fx_sampler")
+                self.writel(S_FX, 3, "<newparam sid=\"{}\">".format(sampler_sid))
+                self.writel(S_FX, 4, "<sampler2D>")
+                self.writel(S_FX, 5, "<source>{}</source>".format(surface_sid))
+                self.writel(S_FX, 4, "</sampler2D>")
+                self.writel(S_FX, 3, "</newparam>")
+                sampler_table[i] = sampler_sid
+
+                if ts.use_map_color_diffuse and diffuse_tex is None:
+                    diffuse_tex = sampler_sid
+                if ts.use_map_color_spec and specular_tex is None:
+                    specular_tex = sampler_sid
+                if ts.use_map_emit and emission_tex is None:
+                    emission_tex = sampler_sid
+                if ts.use_map_normal and normal_tex is None:
+                    normal_tex = sampler_sid
 
         self.writel(S_FX, 3, "<technique sid=\"common\">")
         shtype = "blinn"
@@ -407,7 +409,11 @@ class DaeExporter:
                 shape.value = 1.0
                 mesh.update()
                 p = node.data
-                v = node.to_mesh(bpy.context.scene, True, "RENDER")
+                if bpy.app.version < (2, 80, 0):
+                    v = node.to_mesh(bpy.context.scene, True, "RENDER")
+                else:
+                    v = node.to_mesh(bpy.context.depsgraph, True)
+
                 self.temp_meshes.add(v)
                 node.data = v
                 node.data.update()
@@ -534,8 +540,12 @@ class DaeExporter:
         if (custom_name is not None and custom_name != ""):
             name_to_use = custom_name
 
-        mesh = node.to_mesh(self.scene, apply_modifiers,
-                            "RENDER")  # TODO: Review
+        if bpy.app.version < (2, 80, 0):
+            mesh = node.to_mesh(self.scene, apply_modifiers,
+                "RENDER")  # TODO: Review
+        else:
+            mesh = node.to_mesh(bpy.context.depsgraph, apply_modifiers)
+
         if(armature_modifier):
             for i,arm in enumerate(bpy.data.armatures):
                 arm.pose_position = armature_poses[i]
@@ -551,7 +561,11 @@ class DaeExporter:
             bm.to_mesh(mesh)
             bm.free()
 
-        mesh.update(calc_tessface=True)
+        if bpy.app.version < (2, 80, 0):
+            mesh.update(calc_tessface=True)
+        else:
+            mesh.update(calc_loop_triangles=True)
+
         vertices = []
         vertex_map = {}
         surface_indices = {}
@@ -569,8 +583,12 @@ class DaeExporter:
         has_colors = len(mesh.vertex_colors)
         mat_assign = []
 
-        uv_layer_count = len(mesh.uv_textures)
-        if has_tangents and len(mesh.uv_textures):
+        if bpy.app.version < (2, 80, 0):
+            uv_layer_count = len(mesh.uv_textures)
+        else:
+            uv_layer_count = len(mesh.uv_layers)
+
+        if has_tangents and uv_layer_count:
             try:
                 mesh.calc_tangents()
             except:
@@ -1453,8 +1471,12 @@ class DaeExporter:
         if (node not in self.valid_nodes):
             return
 
-        prev_node = bpy.context.scene.objects.active
-        bpy.context.scene.objects.active = node
+        if bpy.app.version < (2, 80, 0):
+            prev_node = bpy.context.scene.objects.active
+            bpy.context.scene.objects.active = node
+        else:
+            prev_node = bpy.context.view_layer.objects.active # TODO: why do we set active node???
+            bpy.context.view_layer.objects.active = node
 
         self.writel(
             S_NODES, il, "<node id=\"{}\" name=\"{}\" type=\"NODE\">".format(
@@ -1482,23 +1504,34 @@ class DaeExporter:
 
         il -= 1
         self.writel(S_NODES, il, "</node>")
-        bpy.context.scene.objects.active = prev_node
+        if bpy.app.version < (2, 80, 0):
+            bpy.context.scene.objects.active = prev_node
+        else:
+            bpy.context.view_layer.objects.active = prev_node
 
     def is_node_valid(self, node):
         if (node.type not in self.config["object_types"]):
             return False
 
-        if (self.config["use_active_layers"]):
-            valid = False
-            for i in range(20):
-                if (node.layers[i] and self.scene.layers[i]):
-                    valid = True
-                    break
-            if (not valid):
+        if bpy.app.version < (2, 80, 0):
+            if (self.config["use_active_layers"]):
+                valid = False
+                for i in range(20):
+                    if (node.layers[i] and self.scene.layers[i]):
+                        valid = True
+                        break
+                if (not valid):
+                    return False
+
+            if (self.config["use_export_selected"] and not node.select):
                 return False
 
-        if (self.config["use_export_selected"] and not node.select):
-            return False
+        else:
+            if (self.config["use_active_layers"]):
+                print("use_active_layers not supported yet in blender 2.80.")
+
+            if (self.config["use_export_selected"] and not node.select_get()):
+                return False
 
         return True
 
@@ -1528,7 +1561,10 @@ class DaeExporter:
     def export_asset(self):
         self.writel(S_ASSET, 0, "<asset>")
         self.writel(S_ASSET, 1, "<contributor>")
-        author = bpy.context.user_preferences.system.author or "Anonymous"
+        if bpy.app.version < (2, 80, 0):
+            author = bpy.context.user_preferences.system.author or "Anonymous"
+        else:
+            author = bpy.context.preferences.system.author or "Anonymous"
         self.writel(S_ASSET, 2, "<author>{}</author>".format(author))
         self.writel(
             S_ASSET, 2, "<authoring_tool>Collada Exporter for Blender 2.6+, "
