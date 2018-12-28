@@ -1,5 +1,7 @@
 # Godot Engine's "Better" Collada exporter for Blender
 
+> Windy Darian: tried to port this to Blender 2.80 but too much work ><. BUT I fixed a bug on gltf2 io exporter, so I am abandoning this and using blender->gltf2->Godot workflow! XD
+
 Enhanced Collada exporter for [Blender](https://www.blender.org), making the
 format viable for importing meshes into game engines such as
 [Godot Engine](https://godotengine.org) using a libre format.
